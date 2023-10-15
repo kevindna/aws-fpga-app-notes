@@ -215,7 +215,7 @@ out:
 
 int p2p_write(pci_bar_handle_t pci_bar_handle, uint64_t address, uint32_t test_pattern) 
 {
-    int length = 0x0;
+    int length = 0xFF;
     int rc;
     uint32_t addr_low, addr_high;
     uint32_t read_data; 
@@ -253,8 +253,18 @@ int p2p_write(pci_bar_handle_t pci_bar_handle, uint64_t address, uint32_t test_p
     /* Starting the ATG */
     log_info ("INFO: Starting the ATG to do write only transfers");
     rc = fpga_pci_poke(pci_bar_handle, WR_RD_GO, 0x1);
-
-    return rc;
+		
+		// Kevin added
+		sleep(1);	//sleep to allow write through
+    // Read timer
+    uint64_t value; 
+    fpga_pci_peek(pci_bar_handle, 0xF4, &read_data);
+		value = read_data;
+    fpga_pci_peek(pci_bar_handle, 0xF0, &read_data);
+    value = (value << 32) + read_data;
+    log_info ("INFO: Write Timer: %lu (%f)", value, value*(1/125e6));
+    
+		return rc;
 }
 
 int p2p_read_compare(pci_bar_handle_t pci_bar_handle, uint64_t address, uint32_t test_pattern)
@@ -303,6 +313,14 @@ int p2p_read_compare(pci_bar_handle_t pci_bar_handle, uint64_t address, uint32_t
     sleep(1);
     rc = fpga_pci_poke(pci_bar_handle, WR_RD_GO, 0x0);
 
+    // Read timer
+    uint64_t value; 
+    fpga_pci_peek(pci_bar_handle, 0xFC, &read_data);
+		value = read_data;
+    fpga_pci_peek(pci_bar_handle, 0xf8, &read_data);
+    value = (value << 32) + read_data;
+    log_info ("INFO: Read Timer: %lu (%f)", value, value*(1/125e6));
+
     /* Checking Error Status Register */
     log_info ("INFO: Checking Read Error Status Register ");
     fpga_pci_peek(pci_bar_handle, ERR_STATUS, &read_data);
@@ -311,6 +329,10 @@ int p2p_read_compare(pci_bar_handle_t pci_bar_handle, uint64_t address, uint32_t
     log_info ("INFO: Read Error status Register Value is %x ", read_data);
     log_info ("INFO: Read Bresp Error Register Value is %x ", bresp_data);
     log_info ("INFO: Read Rresp Error Register Value is %x ", rresp_data);
+    fpga_pci_peek(pci_bar_handle, 0xd4, &rresp_data);
+    log_info ("INFO: Read First Bresp Error Type Register Value is %x ", (0x3 & rresp_data));
+    fpga_pci_peek(pci_bar_handle, 0xdc, &rresp_data);
+    log_info ("INFO: Read First Rresp Error Type Register Value is %x ", (0x3 & rresp_data));
     if ((read_data != 0) | (bresp_data != 0) | (rresp_data != 0)) {
        rc = 1;
     }
@@ -343,6 +365,8 @@ uint64_t get_128GBar_address(char *dir_name)
                   physical_addr = addr_begin;
                 }
         }
+
+printf("FPGA_ERR_FAIL: %d\n\n\n\n\n", FPGA_ERR_FAIL);
 
         fclose(fp);
         return physical_addr;
